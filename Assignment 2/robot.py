@@ -44,7 +44,7 @@ class Robot(object):
         """
         self.servo.soft_reset()
 
-        blobs, img = self.cam.get_blobs_bottom()
+        blobs, img, _ = self.cam.get_blobs_bottom()
         found_mid = self.cam.find_blob(blobs, self.mid_line_id)
         found_l = self.cam.find_blob(blobs, self.l_line_id)
         found_r = self.cam.find_blob(blobs, self.r_line_id)
@@ -135,7 +135,7 @@ class Robot(object):
             blob: The blob object to be tracked
         """
         # Error between camera angle and target in pixels
-        pixel_error = blob.cx() - self.cam.w_centre
+        pixel_error = blob.cx - self.cam.w_centre
 
         # Convert error to angle
         angle_error = -(pixel_error/sensor.width()*self.cam.h_fov)
@@ -166,7 +166,7 @@ class Robot(object):
             self.servo.set_angle(new_pan_angle)
 
             # Check blobs to see if the line is found
-            blobs, _ = self.cam.get_blobs(self.servo.pan_pos)
+            blobs, _, _ = self.cam.get_blobs(self.servo.pan_pos)
             found_idx = self.cam.find_blob(blobs, threshold_idx)
             if found_idx:
                 break
@@ -185,7 +185,7 @@ class Robot(object):
             threshold_idx (int): Index along self.cam.thresholds to find matching blobs
         """
         while True:
-            blobs, img = self.cam.get_blobs()
+            blobs, img, _ = self.cam.get_blobs()
             if threshold_idx is not None:
                 found_idx = self.cam.find_blob(blobs, threshold_idx)
             else:
@@ -193,18 +193,18 @@ class Robot(object):
 
             if found_idx:
                 for blob in [blobs[i] for i in found_idx]:
-                    img.draw_rectangle(blob.rect())
-                    img.draw_string(blob.cx(),blob.cy(),str(blob.code()))
+                    img.draw_rectangle(blob.rect)
+                    img.draw_string(blob.cx,blob.cy,str(blob.code))
 
-                    angle_err = blob.cx() - self.cam.w_centre
+                    angle_err = blob.cx - self.cam.w_centre
 
                     print('\n' * 2)
-                    print('Code:       ', blob.code())
-                    print('X-pos:      ',blob.cx())
+                    print('Code:       ', blob.code)
+                    print('X-pos:      ',blob.cx)
                     print('Pan angle:  ', self.servo.pan_pos)
                     print('Angle err:  ', angle_err)
                     print('Angle corr: ', (angle_err-self.servo.pan_pos)/self.servo.max_deg)
-                    print('Block size: ', blob.pixels())
+                    print('Block size: ', blob.pixels)
 
                     time.sleep(1)
 

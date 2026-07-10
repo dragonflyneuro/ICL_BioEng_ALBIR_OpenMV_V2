@@ -1,6 +1,5 @@
-from machine import SoftI2C, Pin
-from math import asin
-import pca9685, time
+from machine import Pin, PWM
+import time
 
 class Servo:
     """
@@ -16,13 +15,16 @@ class Servo:
         self.left_zero = 0.05
         self.right_zero = -0.1
 
-        # Define servo pin IDs for the servo shield. EDIT these values as required (servo pins 0-7 from left to right).
-        self.pan_id = 7
-        self.left_id = 5
-        self.right_id = 4
+        # Define servo pin names for the servo shield. EDIT these values as required.
+        # NOTE: P9/P10 share one FlexPWM submodule (and P10 doubles as the camera
+        # frame-sync line), so they are NOT independent - avoid pairing two servos
+        # on P9+P10. Pins below are spread across separate submodules instead.
+        self.pan_id = 'P10'
+        self.left_id = 'P8'
+        self.right_id = 'P7'
 
         # Set up servo angle limits
-        self.degrees = 180   
+        self.degrees = 180
         self.min_deg = -self.degrees/2
         self.max_deg = self.degrees/2
 
@@ -31,18 +33,18 @@ class Servo:
         self.pan_pos = 0
 
         self.freq = 50
-        self.period = 1000000 / self.freq
 
-        # Calculate duty cycles for PWM signal range.
-        self.min_duty = self._us2duty(700)
-        self.max_duty = self._us2duty(2300)
-        self.mid_duty = (self.min_duty + self.max_duty) / 2
-        self.span = (self.max_duty - self.min_duty)
+        # Pulse width range (microseconds) for the PWM signal.
+        self.min_us = 700
+        self.max_us = 2300
+        self.mid_us = (self.min_us + self.max_us) / 2
+        self.span_us = (self.max_us - self.min_us)
 
-        # Initialise the PCA9685 controller for I2C communication.
-        self.pca9685 = pca9685.PCA9685(SoftI2C(sda=Pin('P5'), scl=Pin('P4')), 0x40)
-        self.pca9685.freq(self.freq)
-
+        # Initialise a PWM channel per servo (newer servo shields drive servos
+        # directly over GPIO rather than via a PCA9685 I2C chip).
+        self.pan_pwm = PWM(Pin(self.pan_id), freq=self.freq)
+        self.left_pwm = PWM(Pin(self.left_id), freq=self.freq)
+        self.right_pwm = PWM(Pin(self.right_id), freq=self.freq)
 
     def set_differential_drive(self, speed: float, bias: float) -> None:
         """
@@ -88,11 +90,11 @@ class Servo:
         # Constraint angle to limits
         angle = max(min(angle, self.max_deg), self.min_deg)
 
-        # Compute duty for pca PWM signal
-        duty = self.mid_duty + ( self.span * (angle / self.degrees) )
+        # Compute pulse width (us) for the PWM signal
+        pulse_us = self.mid_us + ( self.span_us * (angle / self.degrees) )
 
-        # Set duty and send PVM signal
-        self.pca9685.duty(self.pan_id, int(duty) )
+        # Set duty and send PWM signal
+        self.pan_pwm.duty_ns(int(pulse_us * 1000))
 
         return self.pan_pos
 
@@ -112,54 +114,36 @@ class Servo:
         self.curr_l_speed = l_speed
         self.curr_r_speed = r_speed
 
-        # Convert speed to duty
-        l_duty = self.mid_duty + (self.span / 2 * (self.curr_l_speed + self.left_zero))
-        r_duty = self.mid_duty - (self.span / 2 * (self.curr_r_speed + self.right_zero))
+        # Convert speed to pulse width (us)
+        l_us = self.mid_us + (self.span_us / 2 * (self.curr_l_speed + self.left_zero))
+        r_us = self.mid_us - (self.span_us / 2 * (self.curr_r_speed + self.right_zero))
 
-        # Ensure duty cycle values are within the valid range
-        l_duty = max(min(l_duty, self.max_duty), self.min_duty)
-        r_duty = max(min(r_duty, self.max_duty), self.min_duty)
+        # Ensure pulse width values are within the valid range
+        l_us = max(min(l_us, self.max_us), self.min_us)
+        r_us = max(min(r_us, self.max_us), self.min_us)
 
         # Set duty and send PWM signal
-        self.pca9685.duty(self.left_id, int(l_duty))
-        self.pca9685.duty(self.right_id, int(r_duty))
+        self.left_pwm.duty_ns(int(l_us * 1000))
+        self.right_pwm.duty_ns(int(r_us * 1000))
 
         return
 
-    def _duty2us(self, value: float) -> int:
-        """
-        Convert a given PWM duty cycle value to microseconds.
-
-        Args:
-            value (float): PWM duty cycle value.
-
-        Returns:
-            int: Corresponding value in microseconds.
-        """
-        return int(value * self.period / 4095)
-
-
-    def _us2duty(self, value: float) -> int:
-        """
-        Convert a given value in microseconds to PWM duty cycle.
-
-        Args:
-            value (float): Value in microseconds.
-
-        Returns:
-            int: Corresponding PWM duty cycle value.
-        """
-        return int(4095 * value / self.period)
-
-
-    def release(self, idx: int) -> None:
+    def release(self, pwm: PWM) -> None:
         """
         Simple servo release method
 
         Args:
-            idx (int): Servo shield pin ID to reset.
+            pwm (PWM): Servo PWM channel to reset (e.g. self.pan_pwm).
         """
-        self.pca9685.duty(idx, 0)
+        pwm.duty_ns(0)
+
+
+    def release_all(self) -> None:
+        """
+        Release all servos.
+        """
+        for pwm in (self.pan_pwm, self.left_pwm, self.right_pwm):
+            self.release(pwm)
 
 
     def soft_reset(self) -> None:
@@ -167,8 +151,7 @@ class Servo:
         Method to reset the servos to default and print a delay prompt.
         """
         # Reset all servo shield pins
-        for i in range(0, 7, 1):
-            self.pca9685.duty(i, 0)
+        self.release_all()
 
         # Reset pan to centre
         self.set_angle(0)
@@ -205,6 +188,11 @@ if __name__ == "__main__":
     print('\n-0.2, -0.2')
     servo.set_speed(-0.2, -0.2)
     time.sleep_ms(1000)
+
+    # Servo speed test
+    print('\n0,0')
+    servo.set_speed(0,0)
+    time.sleep_ms(2000)
 
     print('\n-30deg')
     servo.set_speed(0, 0)

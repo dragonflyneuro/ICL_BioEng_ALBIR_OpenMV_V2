@@ -66,7 +66,7 @@ class PanTuning(object):
 
         while flag is True:
             # Get list of blobs and biggest blob
-            blobs, img = self.cam.get_blobs(self.servo.pan_pos)
+            blobs, img, _ = self.cam.get_blobs(self.servo.pan_pos)
             big_blob = self.cam.get_biggest_blob(blobs)
 
             # Check biggest blob is not None and is red for target then pass
@@ -81,7 +81,7 @@ class PanTuning(object):
         while time.ticks_diff(t_end, time.ticks_ms()) > 0:
             # Get new image and blocks
             # Get list of blobs and biggest blob
-            blobs, img = self.cam.get_blobs(self.servo.pan_pos)
+            blobs, img, _ = self.cam.get_blobs(self.servo.pan_pos)
             big_blob = self.cam.get_biggest_blob(blobs)
 
             if big_blob and self.cam.find_blob([big_blob], 0) is not None:
@@ -113,7 +113,7 @@ class PanTuning(object):
         while time.ticks_diff(t_lost, time.ticks_ms()) > 0:
 
             # Get list of blobs and biggest blob
-            blobs, img = self.cam.get_blobs(self.servo.pan_pos)
+            blobs, img, _ = self.cam.get_blobs(self.servo.pan_pos)
 
             big_blob = self.cam.get_biggest_blob(blobs)
 
@@ -146,7 +146,7 @@ class PanTuning(object):
             pan_angle (float): Angle of the pan wrt. heading
         """
         # Error between camera angle and target in pixels
-        pixel_error = blob.cx() - self.cam.w_centre
+        pixel_error = blob.cx - self.cam.w_centre
 
         # Convert error to angle
         angle_error = -(pixel_error/sensor.width()*self.cam.h_fov)

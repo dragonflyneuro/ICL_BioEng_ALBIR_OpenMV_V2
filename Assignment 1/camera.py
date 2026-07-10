@@ -91,7 +91,7 @@ class Cam(object):
 
         # Rotate only the blob coordinates — never the image
         rotated_centres = [
-            self.rotate_blob_coords(b.cx(), b.cy(), angle) for b in blobs
+            self.rotate_blob_coords(b.cx, b.cy, angle) for b in blobs
         ]
 
         return blobs, img, rotated_centres
@@ -128,7 +128,7 @@ class Cam(object):
 
         # Rotate only the blob coordinates — never the image
         rotated_centres = [
-            self.rotate_blob_coords(b.cx(), b.cy(), angle) for b in blobs
+            self.rotate_blob_coords(b.cx, b.cy, angle) for b in blobs
         ]
 
         return blobs, img, rotated_centres
@@ -149,8 +149,8 @@ class Cam(object):
 
         for blob in blobs:
             # Update the big blob if the current blob has more pixels
-            if blob.pixels() > max_pixels:
-                max_pixels = blob.pixels()
+            if blob.pixels > max_pixels:
+                max_pixels = blob.pixels
                 big_blob = blob
 
         return big_blob
@@ -172,7 +172,6 @@ class Cam(object):
             colours.append(blob[8])
 
         return colours
-
 
     def find_blob(self, blobs, threshold_idx: int):
         """
@@ -214,11 +213,11 @@ if __name__ == "__main__":
 
     # Color Tracking Thresholds (L Min, L Max, A Min, A Max, B Min, B Max)
     thresholds = [
-        (43, 56, 37, 54, 6, 24),  # Orange
+        (30, 80, -28, 0, 0, 30),  # Orange
     ]
 
-    angle = 0           # Set pan angle for rotation correction
-    rotate_image = False # Toggle for visual sanity check:
+    angle = 0                   # Set pan angle for rotation correction
+    rotate_image = False        # Toggle for visual sanity check:
                         #   True  — rotates image so you can verify blob crosses align
                         #   False — raw image displayed, blob crosses still at corrected positions
 
@@ -237,13 +236,13 @@ if __name__ == "__main__":
 
         for blob in blobs:
             # Rotate only the blob centre coordinates
-            dx = blob.cx() - w_centre
-            dy = blob.cy() - h_centre
+            dx = blob.cx - w_centre
+            dy = blob.cy - h_centre
             rx = int(cos_a * dx - sin_a * dy + w_centre)
             ry = int(sin_a * dx + cos_a * dy + h_centre)
 
-            img.draw_rectangle(blob.rect())     # Raw bounding box (pre-rotation reference)
-            img.draw_cross(rx, ry)              # Corrected centre after coordinate rotation
+            img.draw_rectangle(blob.rect)     # Raw bounding box (pre-rotation reference)
+            img.draw_cross((rx, ry))            # Corrected centre after coordinate rotation
 
         # Rotate image AFTER blob detection and coordinate correction
         # Purely for visual verification — confirm rx,ry cross aligns with
