@@ -5,10 +5,11 @@ led = LED("LED_BLUE")
 led.on()
 
 thresholds = [
-      (20, 50, 40, 80, 25, 65), # Red
-      (15, 45, 25, 65, -100, -50), # Blue
+      (50, 60, 50, 75, 40, 60), # Red
+      (22, 35, 50, 70, -100, -60), # Blue
+      (70, 90, -80, -60, 35, 70), # Green
 ]
 
 tuning = PanTuning(thresholds, gain = 5, p=0.2, i=0, d=0.005)
 
-tuning.measure(0.1)
+tuning.measure(0.5)

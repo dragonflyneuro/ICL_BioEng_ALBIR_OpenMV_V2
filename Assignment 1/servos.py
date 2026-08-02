@@ -11,9 +11,10 @@ class Servo:
         Initialise the servo object and sets the tuning coefficients.
         """
         # Servo tuning coefficients; EDIT these values as required.
-        self.pan_angle_corr = 0
-        self.left_zero = 0.05
-        self.right_zero = -0.1
+        self.pan_angle_corr = -8
+        self.half_pan_us = 1000
+        self.left_zero = 0
+        self.right_zero = 0
 
         # Define servo pin names for the servo shield. EDIT these values as required.
         # NOTE: P9/P10 share one FlexPWM submodule (and P10 doubles as the camera
@@ -35,8 +36,8 @@ class Servo:
         self.freq = 50
 
         # Pulse width range (microseconds) for the PWM signal.
-        self.min_us = 700
-        self.max_us = 2300
+        self.min_us = 1500 - self.half_pan_us
+        self.max_us = 1500 + self.half_pan_us
         self.mid_us = (self.min_us + self.max_us) / 2
         self.span_us = (self.max_us - self.min_us)
 
@@ -189,26 +190,26 @@ if __name__ == "__main__":
     servo.set_speed(-0.2, -0.2)
     time.sleep_ms(1000)
 
-    # Servo speed test
     print('\n0,0')
     servo.set_speed(0,0)
     time.sleep_ms(2000)
 
-    print('\n-30deg')
+    # Pan servo angle test
+    print('\n-45deg')
     servo.set_speed(0, 0)
-    servo.set_angle(-30)
-    time.sleep_ms(1000)
+    servo.set_angle(-45)
+    time.sleep_ms(2000)
 
-    print('\n30deg')
-    servo.set_angle(30)
-    time.sleep_ms(1000)
+    print('\n45deg')
+    servo.set_angle(45)
+    time.sleep_ms(2000)
 
-    print('\n-15deg')
-    servo.set_angle(-15)
-    time.sleep_ms(1000)
+    print('\n-90deg')
+    servo.set_angle(-90)
+    time.sleep_ms(2000)
 
-    print('\n15deg')
-    servo.set_angle(15)
-    time.sleep_ms(1000)
+    print('\n90deg')
+    servo.set_angle(90)
+    time.sleep_ms(2000)
 
     servo.soft_reset()

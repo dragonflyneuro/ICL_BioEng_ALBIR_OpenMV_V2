@@ -7,7 +7,7 @@ class Cam(object):
     thresholds for blob detection.
     """
 
-    def __init__(self, thresholds, gain=25):
+    def __init__(self, thresholds, gain=10):
         """
         Initialise the Cam object by setting up camera parameters and
         configuring color thresholds.
@@ -197,9 +197,8 @@ class Cam(object):
 if __name__ == "__main__":
     #
     # Blob threshold tester / visual sanity check
-    #
     # Run this file directly in OpenMV IDE to test colour thresholds and
-    # verify blob coordinate rotation without affecting robot operation.
+    # verify blob coordinate rotation prior to robot operation.
     #
 
     import sensor, math
@@ -213,13 +212,13 @@ if __name__ == "__main__":
 
     # Color Tracking Thresholds (L Min, L Max, A Min, A Max, B Min, B Max)
     thresholds = [
-        (30, 80, -28, 0, 0, 30),  # Orange
+        (32, 23, 24, 116, -2, 42),  # Red
     ]
 
-    angle = 0                   # Set pan angle for rotation correction
+    angle = 0                  # Set pan angle for rotation correction
     rotate_image = False        # Toggle for visual sanity check:
-                        #   True  — rotates image so you can verify blob crosses align
-                        #   False — raw image displayed, blob crosses still at corrected positions
+    #   True  — rotates image so you can verify blob crosses align
+    #   False — raw image displayed, blob crosses still at corrected positions
 
     w_centre = sensor.width() / 2
     h_centre = sensor.height() / 2
