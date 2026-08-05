@@ -29,8 +29,34 @@ class Cam(object):
         # Initialise sensor properties
         self.w_centre = sensor.width() / 2
         self.h_centre = sensor.height() / 2
-        self.h_fov = 31.5
-        self.v_fov = 21
+        # Field of view, computed for this hardware rather than assumed.
+        #   OV5640: 1/4in, 2592x1944 active at 1.4 um pitch
+        #           -> 3.6288 mm x 2.7216 mm active area
+        #   QVGA (320x240) is binned from the FULL array (4:3 -> 4:3, no
+        #   crop), so the whole sensor width is in view.
+        #   f = 8 mm:  h = 2*atan(3.6288/16) = 25.56 deg
+        #              v = 2*atan(2.7216/16) = 19.31 deg
+        #              d = 2*atan(4.5360/16) = 31.66 deg
+        # The previous values (31.5, 21) were the DIAGONAL fov used as
+        # horizontal - note 31.5/21 = 1.50 is impossible for a 4:3 sensor,
+        # whereas 25.56/19.31 = 1.32 matches it.
+        self.h_fov = 25.56
+        self.v_fov = 19.31
+
+        # Periscope pan lever arm: degrees of line-of-sight per degree of
+        # SERVO command. Measured kappa = 10.15 px per servo degree; the
+        # optics give 320/25.56 = 12.52 px per optical degree, so the
+        # mirror swings the view 10.15/12.52 = 0.81 deg per servo degree.
+        #
+        # WHY THIS MATTERS: with the old h_fov = 31.5 the code overstated
+        # angle_error by 31.5/25.56 = 1.23x, while nulling a true error
+        # needs a servo move 1/0.81 = 1.23x larger. Those two errors
+        # cancelled, which is why tracking worked at all. Now that h_fov
+        # is correct, any law that ADDS angle_error to a servo angle must
+        # divide by mirror_lever (tuning.py, robot.py, visTrack.py do).
+        # tuning2.py needs no change - h_fov cancels out of its
+        # direct-drive map algebraically.
+        self.mirror_lever = 0.81
         self.camera_elevation_angle = -11.5     # Can measure and adjust this value
         self.clock = time.clock()
 
