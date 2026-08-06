@@ -2,3 +2,4 @@ venv/
 __pycache__/
 *.pyc
 targetVideo_*.mp4
+wheeltrim.txt
