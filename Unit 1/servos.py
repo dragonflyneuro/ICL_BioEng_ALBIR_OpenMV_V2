@@ -1,3 +1,4 @@
+# servos.py  v0.1.1
 from machine import Pin, PWM
 import time
 
@@ -13,14 +14,33 @@ class Servo:
         # Servo tuning coefficients; EDIT these values as required.
         self.pan_angle_corr = -8
         self.half_pan_us = 1000
+        # Zero-offset trim: shifts each wheel's neutral pulse so it
+        # actually STOPS at speed 0. Fixes creeping at rest.
         self.left_zero = 0
         self.right_zero = 0
+
+        # Wheel servo pulse characteristics: 1500 us = stop, +-80 us is
+        # deadband, +-80 to +-588 us is the linear range. set_speed maps
+        # commands onto that band.
+        self.wheel_deadband_us = 80
+        self.wheel_max_us      = 588
+
+        # Differential rate trim, applied in set_drive. Positive values
+        # compensate for the left wheel running fast. Measured by
+        # wheelcal.py and saved to wheeltrim.txt, loaded below.
+        self.drive_trim = 0.0
+        try:
+            with open("wheeltrim.txt") as _f:
+                self.drive_trim = float(_f.read().strip())
+                print("wheel trim loaded: %+.4f" % self.drive_trim)
+        except (OSError, ValueError):
+            pass
 
         # Define servo pin names for the servo shield. EDIT these values as required.
         # NOTE: P9/P10 share one FlexPWM submodule (and P10 doubles as the camera
         # frame-sync line), so they are NOT independent - avoid pairing two servos
         # on P9+P10. Pins below are spread across separate submodules instead.
-        self.pan_id = 'P10'
+        self.pan_id = 'P9'
         self.left_id = 'P8'
         self.right_id = 'P7'
 
@@ -73,6 +93,33 @@ class Servo:
         self.set_speed(left_speed, right_speed)
 
 
+    def set_drive(self, speed: float, turn: float) -> None:
+        """
+        Arcade-style differential drive: additive mixing, with reverse.
+
+        Unlike set_differential_drive this accepts negative speed and can
+        turn on the spot (speed 0, turn 1 gives one wheel each way).
+
+        Args:
+            speed (float): Forward (+) / reverse (-) rate, -1 to 1.
+            turn (float):  Turn rate, -1 to 1. Works at any speed.
+        """
+        speed = max(min(speed, 1), -1)
+        turn = max(min(turn, 1), -1)
+
+        # trim scales with speed (it is a rate error); turn is added after
+        left = speed * (1.0 - self.drive_trim) - turn
+        right = speed * (1.0 + self.drive_trim) + turn
+
+        # Scale back if either wheel saturates, preserving the turn/speed ratio
+        peak = max(abs(left), abs(right))
+        if peak > 1:
+            left /= peak
+            right /= peak
+
+        self.set_speed(left, right)
+
+
     def set_angle(self, angle: float) -> float:
         """
         Set the pan servo to a specific angle (in degrees).
@@ -100,6 +147,26 @@ class Servo:
         return self.pan_pos
 
 
+    def _speed_to_us(self, s: float) -> float:
+        """Map a speed command (-1..1) to a pulse offset from centre (us).
+
+        Skips the deadband, so any non-zero command actually moves the
+        wheel, and full scale lands on wheel_max_us.
+
+        Args:
+            s (float): Speed command, -1 to 1. Exactly 0 means stop.
+
+        Returns:
+            float: Pulse offset from mid_us, in microseconds.
+        """
+        if abs(s) < 1e-3:
+            return 0.0
+        mag = min(abs(s), 1.0)
+        off = (self.wheel_deadband_us
+               + mag * (self.wheel_max_us - self.wheel_deadband_us))
+        return off if s > 0 else -off
+
+
     def set_speed(self, l_speed: float, r_speed: float) -> None:
         """
         Control the speed of the left and right wheel servos.
@@ -115,9 +182,9 @@ class Servo:
         self.curr_l_speed = l_speed
         self.curr_r_speed = r_speed
 
-        # Convert speed to pulse width (us)
-        l_us = self.mid_us + (self.span_us / 2 * (self.curr_l_speed + self.left_zero))
-        r_us = self.mid_us - (self.span_us / 2 * (self.curr_r_speed + self.right_zero))
+        # Right is negated because the servos are mirror-mounted.
+        l_us = self.mid_us + self._speed_to_us(self.curr_l_speed + self.left_zero)
+        r_us = self.mid_us - self._speed_to_us(self.curr_r_speed + self.right_zero)
 
         # Ensure pulse width values are within the valid range
         l_us = max(min(l_us, self.max_us), self.min_us)

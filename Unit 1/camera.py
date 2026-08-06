@@ -1,3 +1,4 @@
+# camera.py  v0.1.1
 import sensor, time, math
 
 class Cam(object):
@@ -29,33 +30,12 @@ class Cam(object):
         # Initialise sensor properties
         self.w_centre = sensor.width() / 2
         self.h_centre = sensor.height() / 2
-        # Field of view, computed for this hardware rather than assumed.
-        #   OV5640: 1/4in, 2592x1944 active at 1.4 um pitch
-        #           -> 3.6288 mm x 2.7216 mm active area
-        #   QVGA (320x240) is binned from the FULL array (4:3 -> 4:3, no
-        #   crop), so the whole sensor width is in view.
-        #   f = 8 mm:  h = 2*atan(3.6288/16) = 25.56 deg
-        #              v = 2*atan(2.7216/16) = 19.31 deg
-        #              d = 2*atan(4.5360/16) = 31.66 deg
-        # The previous values (31.5, 21) were the DIAGONAL fov used as
-        # horizontal - note 31.5/21 = 1.50 is impossible for a 4:3 sensor,
-        # whereas 25.56/19.31 = 1.32 matches it.
+        # OV5640 sensor (3.6288 x 2.7216 mm active) with an 8 mm lens.
         self.h_fov = 25.56
         self.v_fov = 19.31
 
-        # Periscope pan lever arm: degrees of line-of-sight per degree of
-        # SERVO command. Measured kappa = 10.15 px per servo degree; the
-        # optics give 320/25.56 = 12.52 px per optical degree, so the
-        # mirror swings the view 10.15/12.52 = 0.81 deg per servo degree.
-        #
-        # WHY THIS MATTERS: with the old h_fov = 31.5 the code overstated
-        # angle_error by 31.5/25.56 = 1.23x, while nulling a true error
-        # needs a servo move 1/0.81 = 1.23x larger. Those two errors
-        # cancelled, which is why tracking worked at all. Now that h_fov
-        # is correct, any law that ADDS angle_error to a servo angle must
-        # divide by mirror_lever (tuning.py, robot.py, visTrack.py do).
-        # tuning2.py needs no change - h_fov cancels out of its
-        # direct-drive map algebraically.
+        # Degrees of line-of-sight per degree of pan servo command.
+        # Divide by this when adding an optical angle to a servo angle.
         self.mirror_lever = 0.81
         self.camera_elevation_angle = -11.5     # Can measure and adjust this value
         self.clock = time.clock()
@@ -234,11 +214,12 @@ if __name__ == "__main__":
     sensor.set_framesize(sensor.VGA)
     sensor.skip_frames(time=2000)
     sensor.set_auto_whitebal(False)
-    sensor.set_auto_gain(False, gain_db=20)
+    sensor.set_auto_gain(False, gain_db=28)
 
     # Color Tracking Thresholds (L Min, L Max, A Min, A Max, B Min, B Max)
     thresholds = [
-        (32, 23, 24, 116, -2, 42),  # Red
+        # (69, 78, 25, 46, 10, 49),  # Red
+        (65, 75, -15, 5, -58, -36), # Blue
     ]
 
     angle = 0                  # Set pan angle for rotation correction

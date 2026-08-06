@@ -1,3 +1,4 @@
+# tuning2.py  v0.1.0
 from servos import *
 from camera import *
 import os, time, errno
@@ -23,8 +24,23 @@ class PanTuning(object):
 
         self.min_angle       = 0
         self.max_angle       = 0
-        self.targetmax_angle = 25
+        self.pan_span        = 11   # Output range of the direct-drive map (deg)
+        self.targetmax_angle = 3    # Calibration pass mark (deg)
         self.targetmin_angle = -self.targetmax_angle
+
+        # Measurement smoothing: median of the last N blob positions.
+        # This is a SENSOR filter, not a controller integrator - it does
+        # not change the droop, the steady state, or make this a PID. It
+        # removes frame-to-frame centroid noise (blur, threshold edges)
+        # that would otherwise show up as jitter while staring at a
+        # stationary target.
+        #
+        # It is free: looptime.py showed the loop is entirely blocked in
+        # sensor.snapshot(), so there is idle CPU every frame. Its only
+        # cost is ~1 frame of extra latency, which does not matter for a
+        # stationary target (it would for a fast-moving one).
+        self.smooth_n  = 3
+        self.cx_hist   = []
 
         self.csv = None
 
@@ -113,18 +129,43 @@ class PanTuning(object):
             angle_error (float): Angular offset of target from image centre (degrees).
             pan_angle (float):   Commanded pan servo angle (degrees).
         """
+        # Median-smooth the measurement over the last few frames before
+        # using it. Median rather than mean so a single bad centroid
+        # (partially clipped blob, threshold flicker) is rejected
+        # outright rather than averaged in.
+        self.cx_hist.append(rotated_cx)
+        if len(self.cx_hist) > self.smooth_n:
+            self.cx_hist.pop(0)
+        cx = sorted(self.cx_hist)[len(self.cx_hist) // 2]
+
         # Pixel offset from image centre
-        pixel_error = rotated_cx - self.cam.w_centre
+        pixel_error = cx - self.cam.w_centre
 
         # Convert pixel offset to angle using horizontal field of view
-        # Maximum angle_error = ±h_fov/2 = ±15.75° at image edges
+        # Maximum angle_error = ±h_fov/2 = ±12.78° at image edges
         angle_error = -(pixel_error / sensor.width() * self.cam.h_fov)
 
-        # ✅ Scale angle_error to match the servo's useful pan range
-        # angle_error is in camera FOV space (±15.75°)
-        # servo operates in pan space (±targetmax_angle = ±25°)
-        # scaling factor = targetmax_angle / (h_fov / 2)
-        scale = self.targetmax_angle / (self.cam.h_fov / 2)
+        # Scale angle_error into the servo's pan range.
+        # angle_error is bounded by the camera FOV (±h_fov/2), so this map's
+        # output range is exactly ±pan_span. pan_span is deliberately wider
+        # than targetmax_angle so calibration can clear its pass mark instead
+        # of only just touching it.
+        scale = self.pan_span / (self.cam.h_fov / 2)
+
+        # Pure memoryless map: the command depends only on THIS frame.
+        # No damping, no integrator, no derivative - direct drive.
+        #
+        # It is stable only because pan_span is small. Loop gain is
+        # G = mirror_lever * pan_span / (h_fov/2) = 0.70 at pan_span=11.
+        # With the measured 6-frame servo dead time the slowest mode
+        # decays 0.952 per frame (halves in ~0.30 s). pan_span = 40 gave
+        # G = 1.12 - divergent, which is why the wide-range version
+        # slammed edge to edge. G must stay below 1.
+        #
+        # Price of a stable memoryless map: the pan settles at only
+        # G/(1+G) = 41% of the target's true bearing, i.e. 59% droop.
+        # That does NOT stop you reporting where the target is - the
+        # true bearing is simply pan_pos + angle_error, both returned.
         pan_angle = angle_error * scale
 
         print("    pixel_error=" + str(pixel_error) +
@@ -165,7 +206,6 @@ class PanTuning(object):
         print("  Calibration complete.")
         print("  Min angle: " + str(self.min_angle))
         print("  Max angle: " + str(self.max_angle))
-
         # Reset pan to centre before measurement
         print("  Resetting pan to centre...")
         self.servo.set_angle(0)
@@ -185,6 +225,7 @@ class PanTuning(object):
                 flag = False
 
         # --- Measurement phase ---
+        self.cx_hist = []       # drop stale samples from the wait loop
         print("\n  Phase: Measuring")
         print("  Run time (ms), Error (deg), Pan angle (deg)")
         print("  " + "-" * 45)
@@ -227,6 +268,7 @@ class PanTuning(object):
 
         self.max_angle = 0
         self.min_angle = 0
+        self.cx_hist   = []
         self.servo.set_angle(0)
         self._frame_count = 0
 
@@ -244,7 +286,7 @@ class PanTuning(object):
                 # ✅ Direct servo control — no PID
                 error, pan_angle = self.update_pan(rotated_cx)
 
-                if error < 10:
+                if abs(error) < 20:
                     if pan_angle < self.min_angle:
                         self.min_angle = pan_angle
                         print("  New min angle: " + str(self.min_angle))
